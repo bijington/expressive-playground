@@ -1,0 +1,74 @@
+﻿@page "/playground"
+@using System.Linq;
+@using Expressive
+
+<div>
+    <div>
+        <textarea rows="5" cols="60" name="text" placeholder="Enter expression" @bind="@Value"></textarea>
+
+        <p>Result: @result</p>
+    </div>
+    <div>
+        <h4>Variables</h4>
+        <ul>
+            @foreach (var variable in variables)
+            {
+                <li>
+                    <input @bind="variable.Name" />
+                    <input @bind="variable.Value" />
+                    <input @bind="variable.Type" type="select" />
+                </li>
+            }
+        </ul>
+
+        <button @onclick="AddVariable">Add</button>
+    </div>
+</div>
+
+@code {
+    private string result;
+    private IList<Variable> variables = new List<Variable>();
+
+    private string value;
+
+    public string Value
+    {
+        get { return this.value; }
+        set
+        {
+            if (this.value != value)
+            {
+                this.value = value;
+
+                Evaluate(value);
+            }
+        }
+    }
+
+    private void AddVariable()
+    {
+        variables.Add(new Variable(() => this.Evaluate(this.value)));
+    }
+
+    private void Evaluate(string expressionText)
+    {
+        try
+        {
+            var expression = new Expression(expressionText);
+
+            foreach (var expected in expression.ReferencedVariables)
+            {
+                if (!this.variables.Any(v => v.Name == expected))
+                {
+                    this.variables.Add(new Variable(expected, () => this.Evaluate(this.value)));
+                }
+            }
+
+            result = expression.Evaluate(this.variables.Where(v => !string.IsNullOrEmpty(v.Name)).ToDictionary(v => v.Name, v => v.TypedValue))?.ToString();
+        }
+        catch (Exception ex)
+        {
+            result = ex.Message;
+        }
+    }
+} 
