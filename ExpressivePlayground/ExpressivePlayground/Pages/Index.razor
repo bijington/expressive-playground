@@ -1,0 +1,144 @@
+﻿@page "/"
+@using System.Collections.Generic;
+@using System.Linq;
+@using Expressive;
+
+<div>
+    <div class="main-content">
+        <div class="expression">
+            <textarea class="expression-text" rows="5" cols="60" name="text" placeholder="Enter expression" @bind="@Value" style="width: 100%;height: 100%; font-family: monospace" />
+        </div>
+        <div class="variables">
+            <h4>Variables</h4>
+            <ul>
+                @foreach (var variable in variables)
+                {
+                    <li>
+                        <input @bind="variable.Name" />
+                        <input @bind="variable.Value" />
+                        <input @bind="variable.Type" />
+                    </li>
+                }
+            </ul>
+
+            <button @onclick="AddVariable">Add</button>
+        </div>
+    </div>
+    <div class="bottom-content">
+        <div class="results">
+            <p>Result: @result</p>
+            <ul>
+                @foreach (var line in debug)
+                {
+                    <li>@line</li>
+                }
+            </ul>
+        </div>
+        <div class="options">
+            <p>Options</p>
+            <span>Ignore case</span>
+            <input @bind="IgnoreCase" type="checkbox" />
+
+            <span>No cache</span>
+            <input @bind="NoCache" type="checkbox" />
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private IList<string> debug = new List<string>();
+    private ExpressiveOptions options = ExpressiveOptions.None;
+    private string result;
+    private IList<Variable> variables = new List<Variable>();
+    private string value;
+
+    public bool IgnoreCase
+    {
+        get => this.options.HasFlag(ExpressiveOptions.IgnoreCase);
+        set
+        {
+            if (value)
+            {
+                this.options |= ExpressiveOptions.IgnoreCase;
+            }
+            else
+            {
+                this.options ^= ExpressiveOptions.IgnoreCase;
+            }
+
+            this.Evaluate(this.value);
+        }
+    }
+
+    public bool NoCache
+    {
+        get => this.options.HasFlag(ExpressiveOptions.NoCache);
+        set
+        {
+            if (value)
+            {
+                this.options |= ExpressiveOptions.NoCache;
+            }
+            else
+            {
+                this.options ^= ExpressiveOptions.NoCache;
+            }
+
+            this.Evaluate(this.value);
+        }
+    }
+
+    public string Value
+    {
+        get => this.value;
+        set
+        {
+            if (this.value != value)
+            {
+                this.value = value;
+
+                Evaluate(value);
+            }
+        }
+    }
+
+    private void AddVariable()
+    {
+        variables.Add(new Variable(() => this.Evaluate(this.value)));
+    }
+
+    private void Evaluate(string expressionText)
+    {
+        this.debug.Clear();
+
+        try
+        {
+            this.debug.Add(FormatDebug("Creating expression"));
+            var expression = new Expression(expressionText, this.options);
+
+            this.debug.Add(FormatDebug("Checking expected variables"));
+            foreach (var expected in expression.ReferencedVariables)
+            {
+                if (!this.variables.Any(v => v.Name == expected))
+                {
+                    this.variables.Add(new Variable(expected, () => this.Evaluate(this.value)));
+                }
+            }
+
+            this.debug.Add(FormatDebug("Evaluating expression"));
+            result = expression.Evaluate(this.variables.Where(v => !string.IsNullOrEmpty(v.Name)).ToDictionary(v => v.Name, v => v.TypedValue))?.ToString();
+        }
+        catch (Exception ex)
+        {
+            result = ex.Message;
+            this.debug.Add(FormatDebug($"Encountered error: {ex.Message}"));
+        }
+        finally
+        {
+            this.debug.Add(FormatDebug("Finished evaluating expression"));
+        }
+    }
+
+    private string FormatDebug(string message) => $"{DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.ffffff")}: {message}";
+}
